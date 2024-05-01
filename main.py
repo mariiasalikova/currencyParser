@@ -3,6 +3,7 @@ import streamlit as st
 import datetime
 from bs4 import BeautifulSoup as bs
 import sqlite3
+from transliterate import translit
 
 conn = sqlite3.connect('currencies.db', check_same_thread=False)
 cursor = conn.cursor()
@@ -10,13 +11,15 @@ d = dict([("Евро", "52170"), ("Доллар США", "52148"), ("Фунт С
 
 def main():
     print(d)
-    cursor.execute("""CREATE TABLE IF NOT EXISTS courses (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)""")
-    beginning, ending, country = input_data()
+    cursor.execute("CREATE TABLE IF NOT EXISTS courses (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)")
+    beginning, ending = input_data()
     get_main_data(beginning, ending)
     conn.commit()
     countries = getCurrencies()
     conn.commit()
-    getCountry(countries)
+    print(countries)
+    process(countries)
+    conn.commit()
     
 
 '''евро 52170
@@ -28,7 +31,7 @@ def main():
 52158 лира'''
 
 
-def input_data() -> list[datetime.date, datetime.date, str]:
+def input_data() -> list[datetime.date, datetime.date]:
     
     jan_1 = datetime.date(2024, 1, 1)
     dec_31 = datetime.date(2024, 4, 4)
@@ -40,7 +43,7 @@ def input_data() -> list[datetime.date, datetime.date, str]:
         dec_31,
         format="DD.MM.YYYY",
     )
-    return beginning, ending, country
+    return beginning, ending
 
 def get_main_data(beginning: datetime.date, ending: datetime.date):
     urls = []
@@ -77,27 +80,30 @@ def getCurrencies():
     soup = bs(page.text, 'html.parser')
     table = soup.find('table', class_="table table-bordered downloads tablesorter")
     tr_tags = table.find_all('tr')
-    
+    cache = []
     for tr in tr_tags[1:]:
         td_tags = tr.find_all('td')
         box = []
-        cache = []
+        
         for td in td_tags[0:2]:
             box.append(td.text.strip())
         if (box[1] in d.keys()) and (box[0] not in cache):
-            cursor.execute("UPDATE courses SET COUNTRIES = COUNTRIES || ? WHERE CURRENCYCODE = ?;", (box[0] + "-", d.get(box[1])))
             cache.append(box[0])
+            cursor.execute("UPDATE courses SET COUNTRIES = COUNTRIES || ? WHERE CURRENCYCODE = ?;", (box[0] + "-", d.get(box[1])))
     return cache
 
 def process(countries):
-    processCountries = []
-    st.button('Add country', on_click=getCountry())
+    st.button('Add country', on_click=getCountry(countries))
     
-def getCountry():
+def getCountry(countries):
     country = st.selectbox('Country', countries)
+    cntName = "analysis_" + translit(country, language_code='ru', reversed=True)
+    cursor.execute("CREATE TABLE IF NOT EXISTS %s (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL);" % (cntName))
+    cursor.execute("SELECT * FROM courses WHERE COUNTRIES LIKE ?;", ['%' + country + '%'])
+    rows = list(cursor.fetchall())
+    for row in rows:
+        cursor.execute("INSERT INTO %s VALUES (?, ?, ?);" % (cntName), row[:-1])
     
-    
-    cursor.execute("""CREATE TABLE IF NOT EXISTS analysis (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)""")
 
 
 
