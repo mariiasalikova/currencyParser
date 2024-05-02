@@ -4,22 +4,26 @@ import datetime
 from bs4 import BeautifulSoup as bs
 import sqlite3
 from transliterate import translit
+import pandas as pd
+import matplotlib.pyplot as plt
 
 conn = sqlite3.connect('currencies.db', check_same_thread=False)
 cursor = conn.cursor()
 d = dict([("Евро", "52170"), ("Доллар США", "52148"), ("Фунт Стерлингов", "52146"), ("Индийская рупия", "52238"), ("Йена", "52246"), ("Китайский юань", "52207"), ("Турецкая лира", "52158")])
+fig, ax = plt.subplots()
+plt.xlabel("DATE")
+plt.ylabel("COURSE")
+
 
 def main():
-    print(d)
     cursor.execute("CREATE TABLE IF NOT EXISTS courses (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)")
     beginning, ending = input_data()
     get_main_data(beginning, ending)
     conn.commit()
     countries = getCurrencies()
     conn.commit()
-    print(countries)
     process(countries)
-    conn.commit()
+    
     
 
 '''евро 52170
@@ -96,17 +100,29 @@ def process(countries):
     st.button('Add country', on_click=getCountry(countries))
     
 def getCountry(countries):
-    country = st.selectbox('Country', countries)
-    cntName = "analysis_" + translit(country, language_code='ru', reversed=True)
+    container = st.empty()
+    country = container.selectbox('Country', countries)
+    cntName = "analysis_" + translit(country, language_code='ru', reversed=True).replace(" ", "_").replace("\'", "_").replace("-", "_")
     cursor.execute("CREATE TABLE IF NOT EXISTS %s (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL);" % (cntName))
     cursor.execute("SELECT * FROM courses WHERE COUNTRIES LIKE ?;", ['%' + country + '%'])
     rows = list(cursor.fetchall())
     for row in rows:
         cursor.execute("INSERT INTO %s VALUES (?, ?, ?);" % (cntName), row[:-1])
+    st.info(country)
     
+    data = pd.read_sql_query("SELECT * FROM %s" % (cntName), conn)
+    
+    data['COURSE'] = data['COURSE'].str.replace(',', '.')
+    data['COURSE'] = pd.to_numeric(data['COURSE'])
+    data = data.sort_values('DATE')
+    x = data["DATE"]
+    y = data["COURSE"]
+    
+    ax.plot(x, y)
+    st.pyplot(fig)
+    conn.commit()
 
 
 
 main()
-
 conn.close()
