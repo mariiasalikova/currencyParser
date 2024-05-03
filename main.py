@@ -6,7 +6,6 @@ import sqlite3
 from transliterate import translit
 import pandas as pd
 import matplotlib.pyplot as plt
-import time
 
 conn = sqlite3.connect('currencies.db', check_same_thread=False)
 cursor = conn.cursor()
@@ -16,6 +15,8 @@ plt.xlabel("DATE")
 plt.ylabel("COURSE")
 if 'dt' not in st.session_state:
     st.session_state['dt'] = pd.DataFrame()
+mar_1 = datetime.date(2024, 3, 1)
+mar_7 = datetime.date(2024, 3, 7)
 
 def main():
     cursor.execute("CREATE TABLE IF NOT EXISTS courses (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)")
@@ -30,22 +31,14 @@ def main():
 
 
 def input_data() -> list[datetime.date, datetime.date]:
-    try:
-        mar_1 = datetime.date(2024, 3, 1)
-        mar_7 = datetime.date(2024, 3, 7)
-        global dataframes 
-        dataframes = []
-        beginning, ending = st.date_input(
-            "Select your period",
-            (mar_1, mar_7),
-            mar_1,
-            mar_7,
-            format="DD.MM.YYYY",
-        )
-        return beginning, ending
-    except ValueError:
-        st.info("Choose 2 dates")
-        time.sleep(10000000000)
+    if 'key' not in st.session_state:
+        st.session_state['key'] = (mar_1, mar_7)
+        
+    dates = st.date_input("Select your period", value=st.session_state['key'], format="DD.MM.YYYY")
+    if isinstance(dates, (list, tuple)) and len(dates) == 2:
+        st.session_state['key'] = dates
+    
+    return st.session_state['key']
 
 def get_main_data(beginning: datetime.date, ending: datetime.date):
     urls = []
@@ -126,8 +119,6 @@ def getCountry(countries):
     
     conn.commit()
     
-
-
 
 main()
 conn.close()
