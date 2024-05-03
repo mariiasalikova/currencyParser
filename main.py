@@ -6,6 +6,7 @@ import sqlite3
 from transliterate import translit
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 
 conn = sqlite3.connect('currencies.db', check_same_thread=False)
 cursor = conn.cursor()
@@ -13,7 +14,8 @@ d = dict([("Евро", "52170"), ("Доллар США", "52148"), ("Фунт С
 fig, ax = plt.subplots()
 plt.xlabel("DATE")
 plt.ylabel("COURSE")
-
+if 'dt' not in st.session_state:
+    st.session_state['dt'] = pd.DataFrame()
 
 def main():
     cursor.execute("CREATE TABLE IF NOT EXISTS courses (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)")
@@ -26,28 +28,24 @@ def main():
     
     
 
-'''евро 52170
-доллар 52148
-фунт 52146
-52238 рупия
-52246 йена
-52207 юань
-52158 лира'''
-
 
 def input_data() -> list[datetime.date, datetime.date]:
-    
-    jan_1 = datetime.date(2024, 1, 1)
-    dec_31 = datetime.date(2024, 4, 4)
-
-    beginning, ending = st.date_input(
-        "Select your period",
-        (jan_1, datetime.date(2024, 1, 7)),
-        jan_1,
-        dec_31,
-        format="DD.MM.YYYY",
-    )
-    return beginning, ending
+    try:
+        mar_1 = datetime.date(2024, 3, 1)
+        mar_7 = datetime.date(2024, 3, 7)
+        global dataframes 
+        dataframes = []
+        beginning, ending = st.date_input(
+            "Select your period",
+            (mar_1, mar_7),
+            mar_1,
+            mar_7,
+            format="DD.MM.YYYY",
+        )
+        return beginning, ending
+    except ValueError:
+        st.info("Choose 2 dates")
+        time.sleep(10000000000)
 
 def get_main_data(beginning: datetime.date, ending: datetime.date):
     urls = []
@@ -96,31 +94,38 @@ def getCurrencies():
             cursor.execute("UPDATE courses SET COUNTRIES = COUNTRIES || ? WHERE CURRENCYCODE = ?;", (box[0] + "-", d.get(box[1])))
     return cache
 
+
+
+
 def process(countries):
     st.button('Add country', on_click=getCountry(countries))
     
+    
 def getCountry(countries):
+    dt = st.session_state.dt
     container = st.empty()
     country = container.selectbox('Country', countries)
     cntName = "analysis_" + translit(country, language_code='ru', reversed=True).replace(" ", "_").replace("\'", "_").replace("-", "_")
-    cursor.execute("CREATE TABLE IF NOT EXISTS %s (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL);" % (cntName))
+    cursor.execute("CREATE TABLE IF NOT EXISTS %s (DATE TEXT(15), COURSE REAL NOT NULL);" % (cntName))
     cursor.execute("SELECT * FROM courses WHERE COUNTRIES LIKE ?;", ['%' + country + '%'])
     rows = list(cursor.fetchall())
     for row in rows:
-        cursor.execute("INSERT INTO %s VALUES (?, ?, ?);" % (cntName), row[:-1])
+        cursor.execute("INSERT INTO %s VALUES (?, ?);" % (cntName), row[1:-1])
     st.info(country)
-    
     data = pd.read_sql_query("SELECT * FROM %s" % (cntName), conn)
     
     data['COURSE'] = data['COURSE'].str.replace(',', '.')
     data['COURSE'] = pd.to_numeric(data['COURSE'])
-    data = data.sort_values('DATE')
-    x = data["DATE"]
-    y = data["COURSE"]
     
-    ax.plot(x, y)
-    st.pyplot(fig)
+    if dt.empty:
+        dt["DATE"] = data["DATE"]
+    x = dt["DATE"]
+    dt[f"{cntName}"] = data['COURSE']
+    
+    st.line_chart(dt, x="DATE")
+    
     conn.commit()
+    
 
 
 
