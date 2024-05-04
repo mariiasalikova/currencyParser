@@ -33,7 +33,7 @@ docker run --name streamlit my_app
 
 ----
 
-**OR, IF YOU GETTING TROUBLES**
+**OR, IF YOU ARE GETTING TROUBLES**
 
 2.  **Install the required packages:**
 
