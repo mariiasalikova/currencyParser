@@ -15,31 +15,34 @@ plt.xlabel("DATE")
 plt.ylabel("COURSE")
 if 'dt' not in st.session_state:
     st.session_state['dt'] = pd.DataFrame()
+#basic dates
 mar_1 = datetime.date(2024, 3, 1)
 mar_7 = datetime.date(2024, 3, 7)
 
 def main():
+    #preparing database
     cursor.execute("CREATE TABLE IF NOT EXISTS courses (CURRENCYCODE TEXT(50), DATE TEXT(15), COURSE REAL NOT NULL, COUNTRIES TEXT)")
     beginning, ending = input_data()
     get_main_data(beginning, ending)
     conn.commit()
     countries = getCurrencies()
     conn.commit()
-    process(countries)
+    getCountry(countries)
     
     
 
 
 def input_data() -> list[datetime.date, datetime.date]:
+    #we are using basic dates in order to prevent ValueErrors; copied from best practices
     if 'key' not in st.session_state:
         st.session_state['key'] = (mar_1, mar_7)
-        
     dates = st.date_input("Select your period", value=st.session_state['key'], format="DD.MM.YYYY")
     if isinstance(dates, (list, tuple)) and len(dates) == 2:
         st.session_state['key'] = dates
     
     return st.session_state['key']
 
+#scraping finmarket into table
 def get_main_data(beginning: datetime.date, ending: datetime.date):
     urls = []
     
@@ -69,6 +72,7 @@ def get_main_data(beginning: datetime.date, ending: datetime.date):
 def addToDB(args):
     cursor.execute("INSERT INTO courses VALUES (?, ?, ?, ?)", (args[0], args[1], args[2], '-'))
 
+#here we are scraping iban with its currency codes
 def getCurrencies():
     url = "https://www.iban.ru/currency-codes"
     page = requests.get(url)
@@ -87,24 +91,20 @@ def getCurrencies():
             cursor.execute("UPDATE courses SET COUNTRIES = COUNTRIES || ? WHERE CURRENCYCODE = ?;", (box[0] + "-", d.get(box[1])))
     return cache
 
-
-
-
-def process(countries):
-    st.button('Add country', on_click=getCountry(countries))
     
     
 def getCountry(countries):
+    #to store previous charts
     dt = st.session_state.dt
     container = st.empty()
     country = container.selectbox('Country', countries)
     cntName = "analysis_" + translit(country, language_code='ru', reversed=True).replace(" ", "_").replace("\'", "_").replace("-", "_")
+    #creating a table for each country, as it was necessary in the task
     cursor.execute("CREATE TABLE IF NOT EXISTS %s (DATE TEXT(15), COURSE REAL NOT NULL);" % (cntName))
     cursor.execute("SELECT * FROM courses WHERE COUNTRIES LIKE ?;", ['%' + country + '%'])
     rows = list(cursor.fetchall())
     for row in rows:
         cursor.execute("INSERT INTO %s VALUES (?, ?);" % (cntName), row[1:-1])
-    st.info(country)
     data = pd.read_sql_query("SELECT * FROM %s" % (cntName), conn)
     
     data['COURSE'] = data['COURSE'].str.replace(',', '.')
@@ -114,7 +114,7 @@ def getCountry(countries):
         dt["DATE"] = data["DATE"]
     x = dt["DATE"]
     dt[f"{cntName}"] = data['COURSE']
-    
+    #using streamlit charts to generate chart
     st.line_chart(dt, x="DATE")
     
     conn.commit()
